@@ -22,14 +22,16 @@ public class Main {
         );
 
         Judge judge = new StandardJudge();
+        Judge lbd = new StandardJudge((a, b) -> a.trim().equals(b.trim()));
 
         Solution goods = new AplusB();
         System.out.println("Normal submission -> " + judge.judge(p, goods));
 
+        System.out.println("Lambda Judge -> " + lbd.judge(p, goods));
+
         Solution bads = input -> {
             throw new ArithmeticException("div zero");
         };
-
         System.out.println("Collapse submission -> " + judge.judge(p, bads));
     }
 }
