@@ -1,7 +1,11 @@
 package oj;
 
 import oj.core.*;
+import oj.judge.AplusB;
+import oj.judge.Judge;
 import oj.judge.SimpleJudge;
+import oj.judge.Solution;
+import oj.judge.StandardJudge;
 
 public class Main {
     public static void main(String[] args) {
@@ -11,14 +15,21 @@ public class Main {
     }
 
     public static void check() {
-        Problem problem = new Problem(1, "A+B Problem",
+        Problem p = new Problem(1, "A+B Problem",
             new TestCase("1 5", "6"),
             new TestCase("10 20", "30"),
             new TestCase("0 0", "0")
         );
 
-        JudgeResult result = SimpleJudge.judge(problem);
-        System.out.println("Problem " + problem.geiId());
-        System.out.println("Result: " + result);
+        Judge judge = new StandardJudge();
+
+        Solution goods = new AplusB();
+        System.out.println("Normal submission -> " + judge.judge(p, goods));
+
+        Solution bads = input -> {
+            throw new ArithmeticException("div zero");
+        };
+
+        System.out.println("Collapse submission -> " + judge.judge(p, bads));
     }
 }

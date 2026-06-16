@@ -2,5 +2,5 @@ package oj.core;
     
 
 public enum Status {
-    AC, WA
+    AC, WA, RE
 }
