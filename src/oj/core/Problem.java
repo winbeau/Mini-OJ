@@ -1,11 +1,13 @@
 package oj.core;
 
+import java.util.List;
+
 public class Problem {
     private final int id;
     private final ProblemMeta meta;
-    private final TestCase[] cases;
+    private final List<TestCase> cases;
 
-    public Problem(int id,  ProblemMeta meta, TestCase... cases) {
+    public Problem(int id,  ProblemMeta meta, List<TestCase> cases) {
         this.id = id;
         this.meta = meta;
         this.cases = cases;
@@ -15,7 +17,7 @@ public class Problem {
         return id;
     }
 
-    public ProblemMeta getProblemMeta() {
+    public ProblemMeta getMeta() {
         return meta;
     }
 
@@ -31,7 +33,7 @@ public class Problem {
         return meta.getTimeLimitMs();
     }
 
-    public TestCase[] getCases() {
+    public List<TestCase> getCases() {
         return cases;
     }
 }

@@ -1,2 +1,5 @@
 *.class
 build/
+judge/judge
+submissions/
+submissions.dat

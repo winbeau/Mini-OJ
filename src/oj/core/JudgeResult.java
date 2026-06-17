@@ -1,6 +1,10 @@
 package oj.core;
 
-public class JudgeResult {
+import java.io.Serializable;
+
+public class JudgeResult implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final Status status;
     private final int passed;
     private final int total;
