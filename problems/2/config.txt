@@ -1,0 +1,3 @@
+title=Average Problem (Floating Point)
+judge=oj.judge.SpecialJudge
+timeLimitMs=1500

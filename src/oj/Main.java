@@ -1,37 +1,39 @@
 package oj;
 
 import oj.core.*;
-import oj.judge.AplusB;
-import oj.judge.Judge;
-import oj.judge.SimpleJudge;
-import oj.judge.Solution;
-import oj.judge.StandardJudge;
+import oj.judge.*;
+import oj.io.*;
+import java.io.File;;
 
 public class Main {
     public static void main(String[] args) {
-        System.out.println("Mini-OJ judge ready");
+        try {
+            File problemDir = new File("problems/1");
+            if (!problemDir.exists()) {
+                System.out.println("No Problem Exists");
+                return;
+            }
 
-        check();
-    }
+            Problem problem = SingleFileProblemLoader.load(1, problemDir);
+            System.out.println("==== [M4 Prepared] ====");
+            System.out.println("Problem Name: " + problem.getTitle());
+            System.out.println("Time Limit: " + problem.getTimeLimitMs() + "ms");
+            System.out.println("Relective Class Name: " + problem.getJudgeClass());
 
-    public static void check() {
-        Problem p = new Problem(1, "A+B Problem",
-            new TestCase("1 5", "6"),
-            new TestCase("10 20", "30"),
-            new TestCase("0 0", "0")
-        );
+            Judge judge = JudgeFactory.create(problem.getJudgeClass());
 
-        Judge judge = new StandardJudge();
-        Judge lbd = new StandardJudge((a, b) -> a.trim().equals(b.trim()));
+            Solution solution = input -> {
+                String[] tokens = input.trim().split("\\s+");
+                int a = Integer.parseInt(tokens[0]);
+                int b = Integer.parseInt(tokens[1]);
+                return String.valueOf(a + b);
+            };
 
-        Solution goods = new AplusB();
-        System.out.println("Normal submission -> " + judge.judge(p, goods));
-
-        System.out.println("Lambda Judge -> " + lbd.judge(p, goods));
-
-        Solution bads = input -> {
-            throw new ArithmeticException("div zero");
-        };
-        System.out.println("Collapse submission -> " + judge.judge(p, bads));
+            JudgeResult result = judge.judge(problem, solution);
+            System.out.print("Test Result: " + result);
+        
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
