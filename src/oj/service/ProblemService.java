@@ -14,6 +14,10 @@ public class ProblemService {
     private final ProblemDao problemDao;
     private final ProblemLoader problemLoader;
 
+    public ProblemService() {
+        this(new ProblemDao(), new ProblemLoader("problems"));
+    }
+
     public ProblemService(ProblemDao problemDao, ProblemLoader problemLoader) {
         this.problemDao = problemDao;
         this.problemLoader = problemLoader;
