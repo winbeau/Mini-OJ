@@ -1,0 +1,3 @@
+title=Sum from 1 to N
+judge=oj.judge.StandardJudge
+timeLimitMs=1000
