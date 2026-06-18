@@ -42,4 +42,8 @@ public class ProblemRepository {
     public int cacheSize() {
         return cache.size();
     }
+
+    public void evict(int id) {
+        cache.remove(id);
+    }
 }

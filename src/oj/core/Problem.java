@@ -7,7 +7,7 @@ public class Problem {
     private final ProblemMeta meta;
     private final List<TestCase> cases;
 
-    public Problem(int id,  ProblemMeta meta, List<TestCase> cases) {
+    public Problem(int id, ProblemMeta meta, List<TestCase> cases) {
         this.id = id;
         this.meta = meta;
         this.cases = cases;

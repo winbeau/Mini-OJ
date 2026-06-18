@@ -9,7 +9,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class MachineJudge {
-    // 专门捕获 C++ 输出的正则雷达
     private static final Pattern JSON_REGEX = Pattern.compile(
         "\\{\"status\":\"(\\w+)\",\"passed\":(\\d+),\"total\":(\\d+),\"time_ms\":(\\d+),\"mem_kb\":(\\d+),\"detail\":\"((?:\\\\.|[^\"])*)\"\\}"
     );
@@ -21,7 +20,6 @@ public class MachineJudge {
     }
 
     public JudgeResult judge(String problemDir, String srcFile, String lang, long timeMs, int memMb) {
-        // 利用 ProcessBuilder 跨界创建 Linux 子进程
         ProcessBuilder pb = new ProcessBuilder(
             judgeBinary,
             "--problem", problemDir,
@@ -33,13 +31,13 @@ public class MachineJudge {
         pb.directory(new File("."));
 
         try {
-            Process proc = pb.start(); // 激活 C++ 判题机进程
+            Process proc = pb.start();
 
             boolean exited = proc.waitFor(timeMs + 5000, TimeUnit.MILLISECONDS);
             if (!exited) {
-                proc.destroyForcibly(); // 彻底强杀子进程
+                proc.destroyForcibly();
                 proc.waitFor();
-                return new JudgeResult(Status.TLE, 0, 0, "Java 侧强制终止超时进程", timeMs);
+                return new JudgeResult(Status.RE, 0, 0, "Judge process timed out", timeMs);
             }
 
             String stdout = readAll(proc.getInputStream());
@@ -47,14 +45,15 @@ public class MachineJudge {
             String jsonLine = lastNonBlankLine(stdout);
 
             if (jsonLine.isBlank()) {
-                String detail = stderr.isBlank() ? "C++ 沙箱没有任何标准输出" : "C++ 沙箱无 JSON 输出: " + stderr.trim();
+                String detail = stderr.isBlank()
+                    ? "Judge produced no output"
+                    : "Judge produced no JSON output: " + stderr.trim();
                 return new JudgeResult(Status.RE, 0, 0, detail, 0);
             }
 
-            // 正则切分提取
             Matcher m = JSON_REGEX.matcher(jsonLine);
             if (!m.find()) {
-                return new JudgeResult(Status.RE, 0, 0, "无法解析的沙箱数据: " + jsonLine, 0);
+                return new JudgeResult(Status.RE, 0, 0, "Unparseable judge output: " + jsonLine, 0);
             }
 
             Status status = mapStatus(m.group(1));
@@ -68,9 +67,9 @@ public class MachineJudge {
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new JudgeResult(Status.RE, 0, 0, "调用沙箱时 Java 线程被中断", 0);
+            return new JudgeResult(Status.RE, 0, 0, "Judge call was interrupted", 0);
         } catch (Exception e) {
-            return new JudgeResult(Status.RE, 0, 0, "调用沙箱时 Java 发生异常: " + e.getMessage(), 0);
+            return new JudgeResult(Status.RE, 0, 0, "Judge call failed: " + e.getMessage(), 0);
         }
     }
 

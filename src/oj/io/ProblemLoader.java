@@ -24,9 +24,7 @@ public class ProblemLoader {
         if (inFiles == null || inFiles.length == 0) return result;
 
         Arrays.sort(inFiles, (a, b) -> {
-            int numA = Integer.parseInt(a.getName().replaceAll("[^0-9]", ""));
-            int numB = Integer.parseInt(b.getName().replaceAll("[^0-9]", ""));
-            return Integer.compare(numA, numB);
+            return Integer.compare(indexOf(a.getName()), indexOf(b.getName()));
         });
 
         for (File inFile : inFiles) {
@@ -39,9 +37,17 @@ public class ProblemLoader {
                 String expected = new String(Files.readAllBytes(outFile.toPath())).trim();
                 result.add(new TestCase(input, expected));
             } catch (IOException e) {
-                System.err.println("Failed to read testcase: " + inFile.getName());
+                System.err.println("[ProblemLoader] Failed to read test case: " + inFile.getName());
             }
         }
         return result;
+    }
+
+    private int indexOf(String filename) {
+        try {
+            return Integer.parseInt(filename.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
     }
 }

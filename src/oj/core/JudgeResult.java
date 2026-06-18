@@ -45,11 +45,9 @@ public class JudgeResult implements Serializable {
 
     @Override
     public String toString() {
-        String pre = status + " " + passed + "/" + total + " (" + elapsedMs + "ms)";
-        if (status == Status.AC) {
-            return pre;
-        } else {
-            return pre + " (" + detail + ") ";
-        }
+        String summary = status + " " + passed + "/" + total + " (" + elapsedMs + "ms)";
+        return status == Status.AC || detail == null || detail.isBlank()
+            ? summary
+            : summary + " (" + detail + ")";
     }
 }
