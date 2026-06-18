@@ -1,6 +1,6 @@
 # Mini-OJ
 
-Current stage: M5b.
+Current stage: M5c.
 
 ## Data Responsibilities
 
@@ -22,11 +22,12 @@ mysql -h127.0.0.1 -P3306 -uroot -proot < sample-data.sql
 ```bash
 make -C judge
 javac -cp "lib/*" -d build $(find src -name '*.java')
-java -cp "build:lib/*" oj.Main
+java -cp "build:lib/*" oj.gui.Main
 ```
 
-Pass one or more problem IDs to run selected samples:
+The Swing client loads problem metadata from MySQL, reads test cases from the
+filesystem, invokes the external C++ judge in a `SwingWorker`, and stores each
+result through `SubmissionDao`.
 
-```bash
-java -cp "build:lib/*" oj.Main 1002 1004
-```
+If the database is provided by the local container, start it first with
+`docker start mysql-house`.

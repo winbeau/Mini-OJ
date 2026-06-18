@@ -1,63 +1,130 @@
 package oj.gui;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.table.DefaultTableModel;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.util.ArrayList;
+import java.util.List;
 
 public class OjFrame extends JFrame {
-    public JComboBox<Integer> problemSelector;
-    public JComboBox<String> langSelector;
-    public JTextArea srcTextArea;
-    public JButton submitButton;
-    public JTextArea resultTextArea;
+    private final JComboBox<String> problemBox;
+    private final JComboBox<String> langBox;
+    private final JTextArea codeArea;
+    private final JButton submitBtn;
+    private final JLabel resultLabel;
+    private final DefaultTableModel historyModel;
+    private final JTable historyTable;
+
+    private List<Integer> problemIds = new ArrayList<>();
 
     public OjFrame() {
-        super("Mini-OJ local frontend");
-        initUI();
+        super("Mini-OJ Desktop Client");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setMinimumSize(new Dimension(760, 560));
+        setSize(900, 650);
+        setLayout(new BorderLayout(6, 6));
+
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        toolbar.add(new JLabel("Problem:"));
+
+        problemBox = new JComboBox<>();
+        problemBox.setPreferredSize(new Dimension(300, 28));
+        toolbar.add(problemBox);
+
+        toolbar.add(new JLabel("Language:"));
+        langBox = new JComboBox<>(new String[]{"cpp", "python"});
+        toolbar.add(langBox);
+
+        submitBtn = new JButton("Submit");
+        toolbar.add(submitBtn);
+
+        resultLabel = new JLabel("Ready");
+        resultLabel.setForeground(new Color(0x24, 0x5B, 0x78));
+        toolbar.add(resultLabel);
+        add(toolbar, BorderLayout.NORTH);
+
+        codeArea = new JTextArea();
+        codeArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        codeArea.setTabSize(4);
+        JScrollPane codeScroll = new JScrollPane(codeArea);
+        codeScroll.setBorder(BorderFactory.createTitledBorder("Source Code"));
+        add(codeScroll, BorderLayout.CENTER);
+
+        String[] columns = {
+            "Submission ID", "Problem ID", "Language",
+            "Status", "Passed/Total", "Time (ms)"
+        };
+        historyModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        historyTable = new JTable(historyModel);
+        historyTable.setFillsViewportHeight(true);
+        JScrollPane historyScroll = new JScrollPane(historyTable);
+        historyScroll.setPreferredSize(new Dimension(0, 180));
+        historyScroll.setBorder(BorderFactory.createTitledBorder("Submission History"));
+        add(historyScroll, BorderLayout.SOUTH);
+
+        setLocationRelativeTo(null);
     }
 
-    private void initUI() {
-        this.setSize(700, 550);
-        this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        this.setLocationRelativeTo(null);
+    public void loadProblems(List<Integer> ids, List<String> titles) {
+        problemIds = new ArrayList<>(ids);
+        problemBox.removeAllItems();
+        for (int i = 0; i < ids.size(); i++) {
+            problemBox.addItem(ids.get(i) + " " + titles.get(i));
+        }
+    }
 
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    public void appendHistory(
+            int submissionId,
+            int problemId,
+            String language,
+            String status,
+            String passedTotal,
+            long elapsedMs) {
+        historyModel.addRow(new Object[]{
+            submissionId, problemId, language, status, passedTotal, elapsedMs
+        });
+        int lastRow = historyModel.getRowCount() - 1;
+        historyTable.scrollRectToVisible(historyTable.getCellRect(lastRow, 0, true));
+    }
 
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-        topPanel.add(new JLabel("Select problem ID:"));
-        problemSelector = new JComboBox<>();
-        topPanel.add(problemSelector);
+    public int getSelectedProblemId() {
+        int index = problemBox.getSelectedIndex();
+        if (index < 0 || index >= problemIds.size()) {
+            return -1;
+        }
+        return problemIds.get(index);
+    }
 
-        topPanel.add(new JLabel("Language:"));
-        langSelector = new JComboBox<>(new String[]{"cpp", "python", "java"});
-        topPanel.add(langSelector);
+    public String getSelectedLang() {
+        return (String) langBox.getSelectedItem();
+    }
 
-        submitButton = new JButton("Submit");
-        submitButton.setBackground(new Color(0, 123, 255));
-        submitButton.setForeground(Color.WHITE);
-        topPanel.add(submitButton);
+    public String getSourceCode() {
+        return codeArea.getText();
+    }
 
-        mainPanel.add(topPanel, BorderLayout.NORTH);
+    public JButton getSubmitBtn() {
+        return submitBtn;
+    }
 
-        JPanel centerPanel = new JPanel(new GridLayout(2, 1, 10, 10));
-
-        JPanel srcPanel = new JPanel(new BorderLayout(5, 5));
-        srcPanel.add(new JLabel("Source Code: "), BorderLayout.NORTH);
-        srcTextArea = new JTextArea();
-        srcTextArea.setFont(new Font("Consolas", Font.PLAIN, 14));
-        srcPanel.add(new JScrollPane(srcTextArea), BorderLayout.CENTER);
-        centerPanel.add(srcPanel);
-
-        JPanel resPanel = new JPanel(new BorderLayout(5, 5));
-        resPanel.add(new JLabel("Stdout JSON:"), BorderLayout.NORTH);
-        resultTextArea = new JTextArea();
-        resultTextArea.setEditable(false);
-        resultTextArea.setBackground(new Color(245, 245,245));
-        resultTextArea.setFont(new Font("Consolas", Font.PLAIN, 14));
-        resPanel.add(new JScrollPane(resultTextArea), BorderLayout.CENTER);
-        centerPanel.add(resPanel);
-
-        mainPanel.add(centerPanel, BorderLayout.CENTER);
-        this.add(mainPanel);
+    public JLabel getResultLabel() {
+        return resultLabel;
     }
 }
