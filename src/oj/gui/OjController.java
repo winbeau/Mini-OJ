@@ -1,33 +1,39 @@
 package oj.gui;
 
 import oj.core.JudgeResult;
+import oj.core.JudgeTask;
 import oj.core.ProblemMeta;
-import oj.core.Submission;
 import oj.db.SubmissionDao;
 import oj.judge.MachineJudge;
+import oj.judge.queue.JudgeQueue;
+import oj.judge.queue.JudgeWorker;
 import oj.service.ProblemService;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingWorker;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class OjController {
-    private static final String PROBLEMS_DIR = "problems";
-    private static final String SUBMISSIONS_DIR = "submissions";
-    private static final String USER_NAME = "student";
+    private static final int WORKER_COUNT = 4;
+    private static final int QUEUE_CAPACITY = 64;
     private static final int MEMORY_LIMIT_MB = 256;
+    private static final String USER_NAME = "student";
 
     private final OjFrame view;
     private final ProblemService problemService;
     private final MachineJudge machineJudge;
     private final SubmissionDao submissionDao;
+    private final JudgeQueue<JudgeTask> queue;
+    private final Map<Integer, ProblemMeta> problemMeta = new HashMap<>();
+    private final AtomicInteger submissionIdGenerator =
+        new AtomicInteger((int) (System.currentTimeMillis() % 1_000_000_000L));
+    private final AtomicInteger activeSubmissions = new AtomicInteger();
 
     public OjController(
             OjFrame view,
@@ -38,14 +44,30 @@ public class OjController {
         this.problemService = problemService;
         this.machineJudge = machineJudge;
         this.submissionDao = submissionDao;
+        this.queue = new JudgeQueue<>(QUEUE_CAPACITY);
 
+        startWorkers();
         initProblems();
         bindEvents();
+    }
+
+    private void startWorkers() {
+        for (int i = 0; i < WORKER_COUNT; i++) {
+            Thread worker = new Thread(
+                new JudgeWorker(queue, submissionDao, machineJudge),
+                "judge-worker-" + i
+            );
+            worker.setDaemon(true);
+            worker.start();
+        }
     }
 
     private void initProblems() {
         try {
             Map<Integer, ProblemMeta> all = problemService.listMeta();
+            problemMeta.clear();
+            problemMeta.putAll(all);
+
             List<Integer> ids = new ArrayList<>(all.keySet());
             List<String> titles = new ArrayList<>();
             ids.forEach(id -> titles.add(all.get(id).getTitle()));
@@ -60,7 +82,7 @@ public class OjController {
             view.getResultLabel().setText("Problem loading failed");
             JOptionPane.showMessageDialog(
                 view,
-                "Failed to load problems: " + e.getMessage(),
+                "Failed to load problems: " + safeMessage(e),
                 "Database Error",
                 JOptionPane.ERROR_MESSAGE
             );
@@ -74,137 +96,100 @@ public class OjController {
     void onSubmit() {
         int problemId = view.getSelectedProblemId();
         if (problemId < 0) {
-            JOptionPane.showMessageDialog(
-                view,
-                "Please select a problem.",
-                "Submission",
-                JOptionPane.WARNING_MESSAGE
-            );
+            showWarning("Please select a problem.");
             return;
         }
 
         String language = view.getSelectedLang();
         String sourceCode = view.getSourceCode();
         if (language == null) {
-            JOptionPane.showMessageDialog(
-                view,
-                "Please select a language.",
-                "Submission",
-                JOptionPane.WARNING_MESSAGE
-            );
+            showWarning("Please select a language.");
             return;
         }
         if (sourceCode.isBlank()) {
-            JOptionPane.showMessageDialog(
-                view,
-                "Source code cannot be empty.",
-                "Submission",
-                JOptionPane.WARNING_MESSAGE
-            );
+            showWarning("Source code cannot be empty.");
             return;
         }
 
-        view.getSubmitBtn().setEnabled(false);
-        view.getResultLabel().setText("Judging...");
+        ProblemMeta meta = problemMeta.get(problemId);
+        if (meta == null) {
+            showWarning("Problem metadata is unavailable.");
+            return;
+        }
 
-        SwingWorker<SubmissionOutcome, Void> worker =
-            new SwingWorker<SubmissionOutcome, Void>() {
-                @Override
-                protected SubmissionOutcome doInBackground() throws Exception {
-                    Path sourceFile = writeSourceFile(language, sourceCode);
-                    ProblemMeta meta = problemService.meta(problemId);
-                    JudgeResult result = machineJudge.judge(
-                        PROBLEMS_DIR + "/" + problemId,
-                        sourceFile.toString(),
-                        language,
-                        meta.getTimeLimitMs(),
-                        MEMORY_LIMIT_MB
+        int submissionId = submissionIdGenerator.getAndIncrement();
+        JudgeTask task = new JudgeTask(
+            submissionId,
+            problemId,
+            USER_NAME,
+            language,
+            sourceCode.getBytes(StandardCharsets.UTF_8),
+            meta.getTimeLimitMs(),
+            MEMORY_LIMIT_MB
+        );
+
+        int active = activeSubmissions.incrementAndGet();
+        view.getResultLabel().setText(
+            "Queued #" + submissionId + " (" + active + " active)"
+        );
+
+        SwingWorker<JudgeResult, Void> worker = new SwingWorker<JudgeResult, Void>() {
+            @Override
+            protected JudgeResult doInBackground() throws Exception {
+                queue.put(task);
+                return task.await();
+            }
+
+            @Override
+            protected void done() {
+                int remaining = activeSubmissions.decrementAndGet();
+                try {
+                    JudgeResult result = get();
+                    showResult(task, result, remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    showFailure("Submission was interrupted.", remaining);
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    showFailure(
+                        "Submission failed: " + safeMessage(cause == null ? e : cause),
+                        remaining
                     );
-
-                    Submission submission = new Submission(
-                        problemId,
-                        USER_NAME,
-                        language,
-                        sourceFile.toAbsolutePath().toString()
-                    );
-                    submission.setResult(result);
-                    submissionDao.save(submission);
-                    return new SubmissionOutcome(submission, result);
                 }
-
-                @Override
-                protected void done() {
-                    view.getSubmitBtn().setEnabled(true);
-                    try {
-                        SubmissionOutcome outcome = get();
-                        showResult(outcome.submission, outcome.result);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        showFailure("Submission was interrupted.");
-                    } catch (ExecutionException e) {
-                        Throwable cause = e.getCause();
-                        String message = cause == null ? e.getMessage() : cause.getMessage();
-                        showFailure("Submission failed: " + message);
-                    }
-                }
-            };
+            }
+        };
         worker.execute();
     }
 
-    private Path writeSourceFile(String language, String sourceCode) throws Exception {
-        Path directory = Paths.get(SUBMISSIONS_DIR);
-        Files.createDirectories(directory);
-        Path sourceFile = Files.createTempFile(
-            directory,
-            "submission-",
-            extensionFor(language)
+    private void showResult(JudgeTask task, JudgeResult result, int remaining) {
+        view.getResultLabel().setText(
+            remaining == 0
+                ? result.toString()
+                : result + " (" + remaining + " active)"
         );
-        Files.writeString(sourceFile, sourceCode, StandardCharsets.UTF_8);
-        return sourceFile;
-    }
-
-    private String extensionFor(String language) {
-        switch (language.toLowerCase()) {
-            case "python":
-                return ".py";
-            case "java":
-                return ".java";
-            case "c":
-                return ".c";
-            default:
-                return ".cpp";
-        }
-    }
-
-    private void showResult(Submission submission, JudgeResult result) {
-        view.getResultLabel().setText(result.toString());
         view.appendHistory(
-            submission.getId(),
-            submission.getProblemId(),
-            submission.getLang(),
+            task.getSubmissionId(),
+            task.getProblemId(),
+            task.getLang(),
             result.getStatus().name(),
             result.getPassed() + "/" + result.getTotal(),
             result.getElapsedMs()
         );
 
-        int messageType = result.isAccepted()
-            ? JOptionPane.INFORMATION_MESSAGE
-            : JOptionPane.WARNING_MESSAGE;
-        String detail = result.getDetail();
-        String message = result.toString();
-        if (detail != null && !detail.isBlank()) {
-            message += "\n" + detail;
+        if (!result.isAccepted()) {
+            JOptionPane.showMessageDialog(
+                view,
+                result.toString() + "\n" + result.getDetail(),
+                result.getStatus().name(),
+                JOptionPane.WARNING_MESSAGE
+            );
         }
-        JOptionPane.showMessageDialog(
-            view,
-            message,
-            "Judge Result",
-            messageType
-        );
     }
 
-    private void showFailure(String message) {
-        view.getResultLabel().setText(message);
+    private void showFailure(String message, int remaining) {
+        view.getResultLabel().setText(
+            remaining == 0 ? message : message + " (" + remaining + " active)"
+        );
         JOptionPane.showMessageDialog(
             view,
             message,
@@ -213,13 +198,17 @@ public class OjController {
         );
     }
 
-    private static final class SubmissionOutcome {
-        private final Submission submission;
-        private final JudgeResult result;
+    private void showWarning(String message) {
+        JOptionPane.showMessageDialog(
+            view,
+            message,
+            "Submission",
+            JOptionPane.WARNING_MESSAGE
+        );
+    }
 
-        private SubmissionOutcome(Submission submission, JudgeResult result) {
-            this.submission = submission;
-            this.result = result;
-        }
+    private String safeMessage(Throwable error) {
+        String message = error.getMessage();
+        return message == null ? error.getClass().getSimpleName() : message;
     }
 }

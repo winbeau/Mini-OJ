@@ -2,9 +2,11 @@ package oj.judge;
 
 import oj.core.JudgeResult;
 import oj.core.Status;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,18 +32,22 @@ public class MachineJudge {
         );
         pb.directory(new File("."));
 
+        Process proc = null;
         try {
-            Process proc = pb.start();
+            proc = pb.start();
+            StreamCollector stdoutCollector =
+                new StreamCollector(proc.getInputStream(), "judge-stdout");
+            StreamCollector stderrCollector =
+                new StreamCollector(proc.getErrorStream(), "judge-stderr");
+            stdoutCollector.start();
+            stderrCollector.start();
 
-            boolean exited = proc.waitFor(timeMs + 5000, TimeUnit.MILLISECONDS);
-            if (!exited) {
-                proc.destroyForcibly();
-                proc.waitFor();
-                return new JudgeResult(Status.RE, 0, 0, "Judge process timed out", timeMs);
-            }
+            proc.waitFor();
+            stdoutCollector.join();
+            stderrCollector.join();
 
-            String stdout = readAll(proc.getInputStream());
-            String stderr = readAll(proc.getErrorStream());
+            String stdout = stdoutCollector.content();
+            String stderr = stderrCollector.content();
             String jsonLine = lastNonBlankLine(stdout);
 
             if (jsonLine.isBlank()) {
@@ -66,15 +72,14 @@ public class MachineJudge {
             return new JudgeResult(status, passed, total, detail + " (Memory: " + memKb + "KB)", actualTime);
 
         } catch (InterruptedException e) {
+            if (proc != null) {
+                proc.destroyForcibly();
+            }
             Thread.currentThread().interrupt();
             return new JudgeResult(Status.RE, 0, 0, "Judge call was interrupted", 0);
         } catch (Exception e) {
             return new JudgeResult(Status.RE, 0, 0, "Judge call failed: " + e.getMessage(), 0);
         }
-    }
-
-    private String readAll(InputStream in) throws IOException {
-        return new String(in.readAllBytes(), StandardCharsets.UTF_8);
     }
 
     private String lastNonBlankLine(String text) {
@@ -120,5 +125,42 @@ public class MachineJudge {
             }
         }
         return out.toString();
+    }
+
+    private static final class StreamCollector implements Runnable {
+        private final InputStream input;
+        private final ByteArrayOutputStream output = new ByteArrayOutputStream();
+        private final Thread thread;
+        private IOException failure;
+
+        private StreamCollector(InputStream input, String threadName) {
+            this.input = input;
+            this.thread = new Thread(this, threadName);
+            this.thread.setDaemon(true);
+        }
+
+        private void start() {
+            thread.start();
+        }
+
+        private void join() throws InterruptedException, IOException {
+            thread.join();
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        private String content() {
+            return output.toString(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void run() {
+            try (InputStream stream = input) {
+                stream.transferTo(output);
+            } catch (IOException e) {
+                failure = e;
+            }
+        }
     }
 }

@@ -1,10 +1,11 @@
 package oj.core;
 
 import java.io.Serializable;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Submission implements Serializable {
     private static final long serialVersionUID = 1L;
-    private static int counter = 0;
+    private static final AtomicInteger COUNTER = new AtomicInteger();
 
     private final int id;
     private final int problemId;
@@ -14,7 +15,7 @@ public class Submission implements Serializable {
     private JudgeResult result;
 
     public Submission(int problemId, String userName, String lang, String srcPath) {
-        this.id = ++counter;
+        this.id = COUNTER.incrementAndGet();
         this.problemId = problemId;
         this.userName = userName;
         this.lang = lang;
@@ -50,6 +51,6 @@ public class Submission implements Serializable {
     }
 
     public static int count() {
-        return counter;
+        return COUNTER.get();
     }
 }
